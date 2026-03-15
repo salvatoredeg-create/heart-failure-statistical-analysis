@@ -1,0 +1,771 @@
+---
+title: "Report Statistico"
+author: "Salvatore De Gregorio"
+date: "Appello del 12/01/2026"
+output: pdf_document
+---
+
+
+## **INFORMAZIONI GENERALI SUL DATASET**\
+L’indagine statistica qui presentata si basa sul dataset "Heart Failure Clinical Records", reperito tramite il repository istituzionale *UCI Machine Learning Repository*. Il dataset raccoglie i dati clinici di 299 pazienti affetti da insufficienza cardiaca(Heart Failure), monitorati presso il *Faisalabad Institute of Cardiology* (Pakistan) durante l'anno 2015. Sindrome clinica complessa caratterizzata dall'incapacità del cuore di pompare una quantità di sangue sufficiente a soddisfare le esigenze metaboliche dell'organismo, o dalla capacità di farlo solo a fronte di un aumento delle pressioni di riempimento, monitorando 13 variabili cliniche fondamentali, tra cui la creatinina sierica, la frazione di eiezione e il sodio sierico.
+
+I dati sono stati resi disponibili dai ricercatori Davide Chicco e Giuseppe Jurman, che nel 2020 hanno pubblicato uno studio fondamentale su *BMC Medical Informatics and Decision Making* dimostrando come l'analisi di questi parametri permetta di prevedere la sopravvivenza dei pazienti.
+
+Le variabili del dataset sono:
+
+* **Age**: Età del paziente (anni).
+* **Anaemia**: Riduzione dei globuli rossi o dell'emoglobina (0 = no, 1 = sì).
+* **Creatinine Phosphokinase (CPK)**: Livello dell'enzima CPK nel sangue (mcg/L).
+* **Diabetes**: Se il paziente è affetto da diabete (0 = no, 1 = sì).
+* **Ejection Fraction**: Percentuale di sangue che lascia il cuore ad ogni contrazione.
+* **High Blood Pressure**: Se il paziente soffre di ipertensione (0 = no, 1 = sì).
+* **Platelets**: Piastrine nel sangue (kiloplatelets/mL).
+* **Serum Creatinine**: Livello di creatinina sierica nel sangue (mg/dL).
+* **Serum Sodium**: Livello di sodio sierico nel sangue (mEq/L).
+* **Sex**: Genere del paziente (0 = donna, 1 = uomo).
+* **Smoking**: Se il paziente fuma (0 = no, 1 = sì).
+* **Time**: Periodo di follow-up in giorni.
+* **DEATH_EVENT**: Decesso durante il periodo di follow-up (0 = no, 1 = sì).
+
+Le librerie utilizzate sono:
+```{r, warning=FALSE} 
+library(psych)
+library(knitr)
+library(corrplot)
+library(factoextra)
+library(NbClust)
+library(scatterplot3d)
+library(FactoMineR)
+```
+Di seguito, dopo aver caricato il dataset in R markdown, possiamo visualizzare il numero di variabili, il
+numero di osservazioni e la tipologia di ogni singola variabile.
+```{r} 
+Dati<-read.csv("heart_failure_clinical_records_dataset.csv")
+dim(Dati)
+str(Dati)
+```
+Il dataset è composto in gran parte da misurazioni numeriche continue, fanno eccezione le variabili *anaemia*, *diabetes*, *high_blood_pressure*, *sex*, *smoking* e *DEATH_EVENT*, le quali sono tecnicamente registrate come interi (0/1), ma concettualmente rappresentano categorie diagnostiche o biologiche.
+
+Per evitare ambiguità nell'interpretazione dei risultati, procediamo a ricodificare queste variabili come factor. Questo passaggio è importante perché, trasformando i numeri in categorie ed etichettandoli esplicitamente, garantiremo che R riconosca la distinzione logica tra i gruppi di pazienti. Ciò faciliterà la creazione di grafici comparativi e la lettura dei modelli successivi, assicurando che le variabili qualitative non vengano trattate erroneamente come misure quantitative nelle analisi descrittive.
+
+```{r}
+Dati$anaemia <- factor(Dati$anaemia, levels = c(0, 1), labels = c("No", "Sì"))
+
+Dati$diabetes <- factor(Dati$diabetes, levels = c(0, 1), labels = c("No", "Sì"))
+
+Dati$high_blood_pressure <- factor(Dati$high_blood_pressure, levels = c(0, 1), labels = c("No", "Sì"))
+
+Dati$sex <- factor(Dati$sex, levels = c(0, 1), labels = c("Donna", "Uomo"))
+
+Dati$smoking <- factor(Dati$smoking, levels = c(0, 1), labels = c("No", "Sì"))
+
+Dati$DEATH_EVENT <- factor(Dati$DEATH_EVENT, levels = c(0, 1), labels = c("Sopravvissuto", "Deceduto"))
+```
+Conversione delle variabili binarie in fattori con etichette:
+
+* **Anaemia**: Riduzione emoglobina (0 = No, 1 = Sì)
+* **Diabetes**: Presenza di diabete (0 = No, 1 = Sì)
+* **High Blood Pressure**: Ipertensione (0 = No, 1 = Sì)
+* **Sex**: Genere (0 = Donna, 1 = Uomo)
+* **Smoking**: Abitudine al fumo (0 = No, 1 = Sì)
+* **DEATH_EVENT**: Esito finale (0 = Sopravvissuto, 1 = Deceduto)
+
+È utile precisare che, convertendo le variabili in fattori (*factor*), R assegna internamente una posizione numerica a ciascuna categoria partendo da 1.
+Di conseguenza, il valore originale **0** viene letto dal programma come **livello 1**, mentre il valore originale **1** corrisponde al **livello 2**. Questa informazione è necessaria per interpretare correttamente i risultati che otterremo dai modelli statistici.
+```{r}
+str(Dati)
+```
+Prima di procedere con l'analisi esplorativa, è indispensabile verificare l'integrità del dataset controllando l'eventuale presenza di valori mancanti (*Not Available* o NA).
+
+Utilizziamo una funzione di controllo per conteggiare i valori nulli presenti in ciascuna variabile.
+```{r}
+kable(colSums(is.na(Dati)))
+
+```
+Dall'output si evince che il totale dei valori mancanti è pari a 0. Confermata la completezza del dataset e la corretta codifica delle categorie, possiamo procedere con l'analisi descrittiva.
+\newpage
+
+
+## ANALISI DESCRITTIVA
+
+### VARIABILI QUANTITATIVE
+
+Dopo aver descritto la struttura del dataset, si procede con un’analisi descrittiva ed esplorativa delle variabili numeriche al fine di sintetizzare le principali caratteristiche delle variabili. inanzitutto utilizziamo la libreria *"psych"* che, attraverso il comando *"describe()"*, permette di ottenere una panoramica statistica dettagliata, includendo misure di **tendenza centrale e di dispersione** quali media, mediana, deviazione standard, minimo, massimo, skewness
+e curtosi per ciascuna variabile numerica.
+
+Andiamo a creare quindi un nuovo dataset dove andiamo ad escludere le variabili qualitative:
+```{r}
+vars_continue <- c("age", 
+                   "creatinine_phosphokinase", 
+                   "ejection_fraction", 
+                   "platelets", 
+                   "serum_creatinine", 
+                   "serum_sodium", 
+                   "time")
+Dati_numerici <- Dati[, vars_continue]
+```
+Mostriamo le prime righe del nuovo dataset per verificarne la corretta creazione:
+```{r}
+
+kable(head(Dati_numerici),
+      caption = "Prime righe del dataset per le colonne numeriche",
+      align="c")
+
+```
+Ora su questo dataset numerico andiamo a fare il describe:
+```{r}
+
+describe(Dati_numerici)
+```
+L'analisi della tabella evidenzia comportamenti eterogenei tra le variabili.
+Variabili come **Età** (age) e **Sodio sierico** (serum_sodium) presentano medie e mediane molto vicine, suggerendo una distribuzione tendenzialmente simmetrica, Tuttavia, la skewness rivela che non sono perfettamente simmetriche: age mostra una leggera asimmetria positiva (skew = 0.42) con valori alti, mentre serum_sodium presenta asimmetria negativa (skew = -1.04) con valori bassi. Al contrario, per **CPK** (creatinine_phosphokinase) e **Creatinina sierica** (serum_creatinine), la media risulta nettamente superiore alla mediana, valori elevati di skewness (> 4) e kurtosis (> 24) indicano una distribuzione fortemente asimmetrica positiva, caratterizzata dalla presenza di outlier significativi verso l'alto. Infine, la **Frazione di Eiezione** media si attesta al 38%, un valore ben al di sotto della soglia di normalità fisiologica (50-55%), confermando la severità del quadro clinico nel campione esaminato.
+
+
+Andiamo a vedere graficamente la variabile anagrafica Età, fondamentale per caratterizzare il campione in esame.
+La distribuzione dell’età viene rappresentata mediante un istogramma, che consente di osservare la frequenza dei pazienti nelle diverse classi di età.
+```{r}
+hist(Dati$age,
+main = "Istogramma Distribuzione Età",
+xlab = "Età (Anni)",
+ylab = "Frequenza",
+col = "green",
+border = "black",
+breaks = 15)
+```
+Il campione copre un'ampia fascia di età adulta, spaziando dai 40 ai 95 anni.\
+La distribuzione appare approssimativamente campanulare (simil-normale), con una maggiore concentrazione di pazienti (picco modale) nella fascia compresa tra i 55 e i 65 anni. Questo significa che la maggior parte dei malati ha un'età compresa tra i 55 e i 65 anni.
+Si nota inoltre che c'è una progressiva diminuzione della frequenza superati i 70 anni (coda destra), mentre la fascia piu giovane(40-50 anni) mantiene comunque una presenza rilevante e costante.
+
+Per quanto riguarda la variabile **"creatinine_phosphokinase"** questa indica la "Creatinina Fosfochinasi", un enzima fondamentale presente principalmente nei tessuti muscolari e nel cervello. In condizioni fisiologiche, il CPK rimane all'interno delle cellule. Quando si verifica un danno tissutale o una necrosi (morte cellulare), la membrana delle cellule si rompe e l'enzima si riversa nel circolo sanguigno quindi il ritrovamento di elevate quantità di CPK nel sangue è dunque l'indice diretto di una citolisi (rottura cellulare).  
+
+Il Boxplot è il grafico migliore per visualizzarlo vista la presenta di outlier.
+```{r}
+boxplot(Dati$creatinine_phosphokinase,
+        main = "Boxplot Creatinina Fosfochinasi (CPK)",
+        ylab = "CPK (mcg/L)",
+        col = "gold",       
+        border = "black",
+        pch = 19,            
+        outcol = "red")
+```
+Osservando il grafico, si nota che la "scatola" gialla (che rappresenta il 50% centrale della popolazione) è estremamente schiacciata verso lo zero. Questo indica che la maggioranza dei pazienti presenta valori di CPK contenuti. La linea nera della mediana è talmente in basso da confondersi quasi con la base della scatola.\
+Gli outlier, rappresentati dai pallini rossi, non sono pochi casi isolati come spesso accade, ma si presentano in numero considerevole, distribuendosi verticalmente da circa 1000 fino a 7861 mcg/L**(microgrammi per litro)**.\
+Questi valori estremamente patologici indicano un danno muscolare grave in corso. Poiché il cuore è un muscolo, questo dato risulta coerente con il quadro clinico di insufficienza cardiaca severa analizzato nello studio.
+
+La Frazione di Eiezione (ejection_fraction) è forse la variabile clinica più importante di tutto il dataset per capire la gravità dell'insufficienza cardiaca.\
+Questo è un indicatore emodinamico fondamentale che misura l'efficienza contrattile del cuore. Essa viene espressa in percentuale poiché rappresenta la porzione di sangue che il ventricolo sinistro riesce a espellere durante la contrazione (sistole) rispetto al volume totale di sangue presente al termine del riempimento (diastole).
+Dalla tabella describe che abbiamo fatto prima, sappiamo che la media è 38% (molto bassa) e che la distribuzione presenta una leggera asimmetria positiva (Skewness 0.55)
+```{r}
+hist(Dati$ejection_fraction,
+     main = "Distribuzione Frazione di Eiezione",
+     xlab = "Frazione di Eiezione (%)",
+     ylab = "Frequenza",
+     col = "cornflowerblue",
+     border = "white",
+     breaks = 15)          
+abline(v = 50, col = "red", lwd = 3, lty = 2) 
+legend("topright", legend = "Soglia Normalità (50%)", col = "red", lty = 2, lwd = 3,cex=0.8)
+```
+La linea rossa tratteggiata indica la soglia clinica minima di normalità infatti in un soggetto sano, il cuore espelle tra il 50% e il 70% del sangue contenuto nel ventricolo. Si nota immediatamente che la quasi totalità del campione si trova al di sotto di tale soglia.\
+La massa della distribuzione è fortemente concentrata su valori bassi, con la maggior parte delle barre si trova tra il 30% e il 45%, confermando il dato medio del 38% rilevato nell'analisi statistica. In conclusione questo grafico visualizza la gravità della patologia nel campione, confermando che non stiamo osservando cuori sani, ma organi con una capacità contrattile significativamente ridotta.
+
+Passando alla variabile **"Platelets"** questa indica la concentrazione di piastrine presenti nel sangue. Le piastrine, o trombociti, sono piccoli frammenti cellulari che svolgono un ruolo fondamentale nei processi di **emostasi e coagulazione**, contribuendo alla formazione del coagulo in caso di lesioni vascolari. Il numero di piastrine deve stare in un equilibrio perfetto (il range normale è solitamente tra 150.000 e 450.000 unità per **microlitro di sangue**). Valori superiori a tale range identificano una condizione di **trombocitosi**, che può aumentare il rischio di formazione di trombi e, di conseguenza, favorire eventi cardiovascolari come infarto o ictus. Al contrario valori inferiori al range normale configurano una **trombocitopenia**, condizione associata a una ridotta capacità di coagulazione e a un maggiore rischio di emorragie, sia interne sia esterne.
+```{r}
+piastrine_k <- Dati$platelets / 1000
+
+boxplot(piastrine_k,
+        main = "Distribuzione Piastrine e Soglie di Rischio",
+        ylab = "Conta Piastrinica (x 1000 / mcL)",
+        col = "cyan",
+        border = "black",
+        pch = 19,           
+        outcol = "red",      
+        ylim = c(0, 900),    
+        las = 1)             
+
+abline(h = c(150, 450), col = "darkblue", lty = 2, lwd = 2)
+
+legend("topright",
+       legend = "Range di Normalità\n(150k - 450k)", 
+       col = "darkblue",
+       lty = 2, lwd = 2,
+       cex = 0.8, bty = "n")     
+```
+Per migliorare la legibilità del grafico abbiamo ri-scalato i dati creando una variabile temporanea dividendo i valori originali per 1000, questa operazione che ci ha permesso di eliminare la poco intuitiva notazione scientifica sull'asse delle ordinate (es. 4e+05) in favore di numeri interi molto più leggibili che esprimono le "migliaia di unità". Inoltre è stata aggiunta, tramite il comando specifico abline due linee orizzontali tratteggiate in corrispondenza dei valori 150 e 450: questi riferimenti visivi delimitano il "range di normalità" fisiologico, permettendo così di identificare a colpo d'occhio quali pazienti si trovano nella fascia di sicurezza (la "scatola" azzurra centrale) e quali invece ricadono nelle zone di rischio patologico per trombocitopenia o trombocitosi, evidenziate dai punti rossi esterni a tale intervallo.\
+Dal grafico emerge chiaramente che, sebbene la mediana della popolazione (linea nera spessa) ricada all'interno del range di normalità (tra le due linee tratteggiate blu), è presente un numero significativo di outlier (punti rossi) che si discostano significativamente dalla media.
+Questa distribuzione è fortemente coerente con la patologia di insufficienza cardiaca grave analizzata nello studio. Gli outlier superiori (sopra 450) indicano uno stato di **trombocitosi**, spesso reattiva all'infiammazione sistemica cronica tipica dello scompenso, mentre gli outlier inferiori (sotto 150) segnalano una **trombocitopenia** frequente in caso di congestione epatica o come effetto collaterale di terapie farmacologiche aggressive.
+
+La Variabile **"serum_creatinine"** (creatinina sierica) è il marker principale per valutare la funzionalità renale. Poiché cuore e reni sono fisiologicamente interconnessi, un peggioramento della funzione cardiaca porta spesso a una sofferenza renale (Sindrome Cardiorenale dato che, se il cuore non pompa abbastanza sangue i reni non riescono a filtrare le tossine e la creatinina sale.
+
+Anche in questo caso la scelta migliore ricade sul boxplot vista la presenza di outlier.
+```{r}
+boxplot(Dati$serum_creatinine,
+        main = "Boxplot Creatinina Sierica (Funzionalità Renale)",
+        ylab = "Creatinina (mg/dL)",
+        col = "orange",       
+        border = "black",
+        pch = 19,           
+        outcol = "red")    
+
+abline(h = 1.2, col = "darkred", lwd = 2, lty = 2)
+legend("topright", legend = "Soglia Normalità (1.2 mg/dL)", 
+       col = "darkred", lty = 2, lwd = 2, cex = 0.8)
+```
+La linea rossa orizzontale posta a 1.2 mg/dL **(milligrammi per decilitro)** delimita il confine della normale funzionalità renale. Valori al di sotto sono considerati sani; valori al di sopra indicano un inizio di **sofferenza renale**.\
+Il "corpo" centrale dei dati (la scatola gialla che contiene il 50% dei pazienti) si trova perlopiù al di sotto o in prossimità della linea di soglia. La mediana è appena sotto 1.2 mg/dL. Questo indica che una buona parte dei pazienti mantiene ancora una funzionalità renale accettabile. L'aspetto più critico è la lunga scia verticale di punti rossi, che rappresentano gli outlier, che si estende verso l'alto fino ad arrivare a 9.4 mg/dL, valore estromo indicativa di insufficienza renale severa. La presenza di tali outlier conferma che, oltre allo scompenso cardiaco, una parte dei pazienti soffre di gravi compromissioni renali, un fattore che peggiora drasticamente le aspettative di sopravvivenza
+
+Per quanto riguarda la variabile **"serum_sodium"** che rappresenta il sodio nel sangue, questo è un elettrolita che regola l'acqua nel corpo. Nello scompenso cardiaco, il corpo tende a trattenere troppi liquidi (edema). Tanta acqua "diluisce" il sangue, facendo scendere la concentrazione di sodio. Questa condizione si chiama **Iponatriemia**, più basso è il sodio, peggiore è la prognosi.
+Per la variabile Sodio Sierico è stato preferito l'uso dell'Istogramma rispetto al Boxplot. A differenza della Creatinina, caratterizzata da outlier estremi e isolati (valori < 135 mEq/L), il Sodio presenta una distribuzione continua che tende a spostarsi in blocco verso valori bassi. L'istogramma permette di apprezzare meglio la forma della distribuzione e lo spostamento della massa dei dati.
+```{r}
+hist(Dati$serum_sodium,
+     main = "Distribuzione Sodio Sierico",
+     xlab = "Sodio (mEq/L)",
+     ylab = "Frequenza",
+     col = "lightgreen",
+     border = "white",
+     breaks = 20) # Aumentiamo i breaks per vedere meglio i dettagli
+
+# Linee di soglia (Normalità 135 - 145)
+abline(v = c(135, 145), col = "blue", lwd = 3, lty = 2)
+
+legend("topleft", legend = "Range Normalità (135-145)", 
+       col = "blue", lty = 2, lwd = 3, cex = 0.8)
+```
+L'istogramma illustra la distribuzione della concentrazione di sodio nel sangue rispetto al range di normalità (delimitato dalle linee blu tratteggiate: 135-145 mEq/L
+**(milliequivalenti per litro)**). Si osserva chiaramente una distribuzione spostata verso sinistra (valori bassi). Una porzione rilevante delle barre verdi si trova alla sinistra della soglia di 135, confermando visivamente la prevalenza di iponatriemia nel campione analizzato. Questo "scivolamento" della curva verso valori bassi è tipico dello scompenso cardiaco congestizio.
+
+
+La variabile **"Time"** rappresenta il periodo di osservazione (follow-up) espresso in **giorni**. Indica l'intervallo temporale trascorso tra l'arruolamento del paziente nello studio e l'evento finale (decesso) o la fine del monitoraggio (censura). Questa variabile misura la durata della sopravvivenza. Una distribuzione sbilanciata verso valori bassi (pochi giorni) indicherebbe una mortalità precoce e acuta; una distribuzione estesa verso valori alti indica la presenza di pazienti che sopravvivono a lungo termine con la patologia.\
+L'istogramma mostra come si distribuiscono i giorni di osservazione dei pazienti.
+```{r}
+hist(Dati$time,
+     main = "Distribuzione del Tempo di Follow-up",
+     xlab = "Giorni di Osservazione",
+     ylab = "Numero di Pazienti",
+     col = "lavender",      
+     border = "black",
+     breaks = 20)           
+
+
+abline(v = mean(Dati$time), col = "red", lwd = 2, lty = 2)
+
+
+legend("topright", 
+       legend = paste("Durata Media:", round(mean(Dati$time), 0), "giorni"), 
+       col = "red", lty = 2, lwd = 2, cex = 0.8)
+```
+L'istogramma mostra come si distribuiscono i giorni di osservazione dei pazienti. Si nota un'ampia variabilità nella durata del follow-up, da pochi giorni a oltre 250.
+La presenza di barre alte nella parte sinistra del grafico (tempi brevi) suggerisce che una parte consistente dei pazienti va incontro all'evento (decesso) o esce dallo studio in tempi relativamente rapidi.La linea rossa indica la durata media dell'osservazione.
+
+**Analisi Quantitativa degli Outlier**
+
+Oltre all’osservazione grafica della loro possibile presenza, è possibile individuare gli outlier anche in modo quantitativo. A tal fine, si può applicare una funzione a tutte le variabili del dataset, ottenendo come output il numero di outlier per ciascuna variabile.
+
+```{r}
+outliers <- sapply(Dati_numerici, function(x) {
+Q1 <- quantile(x, 0.25)
+Q3 <- quantile(x, 0.75)
+IQR <- Q3 - Q1
+lower <- Q1 - 1.5 * IQR
+upper <- Q3 + 1.5 * IQR
+sum(x < lower | x > upper)
+})
+kable(outliers,
+      caption = "Outlier",
+      col.names = c("Variabile", "N. Outlier"))
+
+```
+I risultati ottenuti risultano pienamente coerenti con l’analisi grafica (boxplot e istogrammi) discussa in precedenza. In particolare, sia Creatinine Phosphokinase sia Serum Creatinine presentano 29 outlier ciascuna: nei rispettivi boxplot era infatti visibile una lunga coda di valori estremi verso l’alto. Considerando un campione di 299 pazienti, ciò implica che circa il 10% dei soggetti presenta valori particolarmente elevati rispetto alla distribuzione complessiva.
+Il boxplot delle piastrine evidenziava outlier sia nella coda superiore (trombocitosi) sia in quella inferiore (trombocitopenia); la presenza di entrambe le code giustifica il numero totale di 21 outlier rilevati.
+Per quanto riguarda la Ejection Fraction, il numero ridotto di outlier (2) conferma quanto osservato in precedenza: la distribuzione è relativamente omogenea, poiché la maggior parte dei pazienti presenta valori inferiori al 50%, risultando quindi concentrata in un intervallo ristretto.
+Infine, gli istogrammi relativi a Età e Tempo mostravano distribuzioni regolari (a campana o uniformemente distribuite lungo l’asse), senza la presenza di valori isolati, in linea con l’assenza di outlier individuati.
+
+Per comprendere meglio l'impatto dei valori anomali sulla distribuzione dei dati, abbiamo calcolato la loro **frequenza relativa percentuale**.
+```{r}
+outliers_perc <- round((outliers / nrow(Dati_numerici)) * 100, 2)
+
+
+tabella_percentuali <- data.frame(
+  Variabile = names(outliers_perc),
+  Incidenza = paste0(outliers_perc, "%"), 
+  row.names = NULL
+)
+
+kable(tabella_percentuali, 
+      caption = "Incidenza Percentuale degli Outlier sul Totale",
+      col.names = c("Variabile", "% Outlier"),
+      align = "lc")
+```
+
+### VARIABILI QUALITATIVE
+
+Al fine di caratterizzare la popolazione in esame, riportiamo di seguito le frequenze assolute e relative per tutte le variabili categoriche binarie. Questa tabella fornisce il quadro esatto della prevalenza delle comorbilità e della ripartizione demografica.
+```{r}
+vars_cat <- c("sex", "smoking", "diabetes", "high_blood_pressure", "anaemia", "DEATH_EVENT")
+nomi_estesi <- c("Sesso", "Fumo", "Diabete", "Ipertensione", "Anemia", "Esito Finale")
+
+tabella_riassuntiva <- data.frame(
+  Variabile = character(),
+  N_Positivi = integer(),       
+  Pct_Positivi = numeric(),     
+  N_Negativi = integer(),        
+  Pct_Negativi = numeric(),      
+  stringsAsFactors = FALSE
+)
+
+for (i in 1:length(vars_cat)) {
+  t <- table(Dati[[vars_cat[i]]]) 
+  n_neg <- t[1]  
+  n_pos <- t[2]  
+  
+  totale <- sum(t)
+  
+
+  pct_pos <- round((n_pos / totale) * 100, 2)
+  pct_neg <- round((n_neg / totale) * 100, 2)
+  
+  tabella_riassuntiva[i, ] <- list(nomi_estesi[i], n_pos, pct_pos, n_neg, pct_neg)
+}
+kable(tabella_riassuntiva, 
+      caption = "Caratteristiche della Popolazione",
+      col.names = c("Variabile", "Sì / Uomini", "%", "No / Donne", "%"),
+      align = "lcccc")
+
+```
+La seguente tabella riassume la distribuzione completa di tutte le variabili categoriche. Per ogni fattore di rischio, vengono riportati sia il conteggio assoluto, indicando quanti pazienti ci sono in quella categoria, sia la frequenza relativa percentuale per entrambe le categorie, indicando il peso di quel gruppo rispetto al totale.
+
+A supporto dell'analisi tabellare abbiano adottato grafici a **barre orizzontali** che permette di visualizzare la composizione demografica e clinica del campione di 299 pazienti. Poiché tutte le variabili categoriche sono binarie, è possibile apprezzare immediatamente la prevalenza dei fattori di rischio.
+```{r}
+par(mfrow=c(2,3), mar=c(3, 6, 3, 2)) 
+
+vars <- c("sex", "smoking", "diabetes", "high_blood_pressure", "anaemia", "DEATH_EVENT")
+titoli <- c("Distribuzione per Sesso", 
+            "Abitudine al Fumo", 
+            "Presenza di Diabete", 
+            "Ipertensione", 
+            "Anemia", 
+            "Stato Vitale (Mortalità)")
+
+for (i in 1:length(vars)) {
+  
+  
+  counts <- table(Dati[[vars[i]]])
+  
+ 
+  pct <- round(100 * counts / sum(counts), 1)
+  
+ 
+  labels_pie <- paste(names(counts), "\n", pct, "%", sep="")
+  
+  
+  if(i == 6) { 
+    colore <- c("lightgreen", "salmon") 
+  } else {
+    colore <- c("lightblue", "yellow") 
+  }
+  
+  
+grafico<-barplot(counts, 
+        main = titoli[i],
+        horiz = TRUE,
+        col = colore,
+        xlim = c(0, 300))  
+text(x = counts, 
+       y = grafico, 
+       label = paste0(pct, "%"), 
+       pos = 4, 
+       cex = 0.9, 
+       col = "black")
+}
+par(mfrow=c(1,1))
+```
+
+Da questa griglia di grafici possiamo constatare che:
+
+* Il campione mostra un evidente sbilanciamento di **genere**, con una netta prevalenza maschile (64.9% Uomini contro 35.1% Donne). Questo dato è coerente con la letteratura epidemiologica sullo scompenso cardiaco, che tende a manifestarsi più frequentemente nella popolazione maschile.
+* l'abitudine al **Fumo** e **l'ipertensione** sono presenti in circa un terzo della popolazione (tra il 32% e il 35%), rappresentando fattori di rischio significativi ma meno pervasivi rispetto a diabete e anemia in questo specifico gruppo.
+* **Anemia** e il **Diabete** rappresentano le comorbilità più frequenti, interessando rispettivamente circa il 43% e il 42% dei pazienti. Per comorbilità si intende la presenza di altre patologie associate alla malattia principale. La loro elevata diffusione indica un quadro clinico complesso e una maggiore fragilità nei pazienti analizzati.
+* Il grafico relativo alla **Mortalità** evidenzia che il 32.1% dei pazienti (96 su 299) è deceduto durante il periodo di follow-up. Questo tasso di mortalità, pari a quasi un paziente su tre, conferma la gravità della patologia trattata.
+
+**CORRELAZIONE**
+
+Per concludere l’analisi esplorativa, esaminiamo le interdipendenze tra tutte le variabili numeriche del dataset
+attraverso l’analisi della correlazione. Questo passaggio è fondamentale per individuare la **multicollinearità**
+(variabili che dicono la stessa cosa) e per confermare quali fattori sono più legati all’esito diagnostico.
+
+Utilizziamo la **libreria corrplot** per visualizzare la matrice.
+Avendo gia creato una variabile contenere solo le variabili numeriche calcoliamo le correlazioni e arrotondiamo a 2 decimali:
+
+```{r}
+corr<-round(cor(Dati_numerici),2)
+```
+
+Dopo aver calcolato la matrice di correlazione potremmo stamparla cosi com’è oppure, per semplificarne
+la lettura, possiamo plottarla mediante la libreria **CorrPlot**.
+
+```{r}
+corrplot(corr, method = "color",
+type = "full",
+addCoef.col = "black",
+tl.col = "black",
+number.cex = 0.7,
+title = "Matrice di Correlazione",
+mar = c(0,0,1,0))
+```
+
+Dall’analisi della matrice di correlazione non emerge la presenza di **multicollinearità**, poiché nessuna coppia di variabili presenta coefficienti di correlazione elevati (in valore assoluto superiori a 0.8). Ciò indica che ciascuna variabile fornisce un contributo informativo distinto e specifico alla caratterizzazione del paziente, apportando un’informazione complementare rispetto alle altre.
+La bassa correlazione tra le variabili risulta inoltre coerente dal punto di vista clinico: ad esempio, il numero di **piastrine**, legato ai processi di coagulazione, non dipende direttamente dalla funzione di pompaggio del cuore (**frazione di eiezione**), così come l’età non determina automaticamente i livelli di **sodio** nel sangue. Si tratta infatti di sistemi fisiologici differenti che, pur potendo interagire, non presentano una relazione lineare diretta.
+Le correlazioni osservate risultano presenti laddove attese dal punto di vista biologico. In particolare, tra **Time** ed **Age** si osserva una correlazione negativa moderata (-0.22), indicando che i pazienti più anziani tendono a rimanere nello studio per un periodo di tempo inferiore. Analogamente, la correlazione negativa tra **Time** e **Serum Creatinine** (-0.15) suggerisce che valori più elevati di creatinina, indicativi di una ridotta funzionalità renale, sono associati a una prognosi peggiore. Inoltre, la correlazione negativa tra **Serum Sodium** e **Serum Creatinine** (-0.19) è coerente con il legame fisiologico tra funzione renale ed equilibrio elettrolitico.
+Si osserva inoltre una lieve correlazione positiva tra **Age** e **Serum Creatinine** (0.16), dato che riflette il naturale declino fisiologico della capacità di filtrazione renale associato all’invecchiamento. I pazienti più anziani tendono infatti a presentare valori basali di creatinina più elevati, indicativi di una funzionalità renale mediamente ridotta rispetto ai soggetti più giovani.
+Infine, si osserva una lieve correlazione positiva (0.18) tra **Ejection Fraction** e **Serum Sodium**. Questo risultato è biologicamente coerente con la fisiopatologia dell’insufficienza cardiaca: una ridotta capacità di pompaggio del cuore può determinare ritenzione idrica e conseguente diluizione degli elettroliti (iponatriemia). Pertanto, una migliore funzionalità cardiaca risulta debolmente associata a livelli di sodio sierico più stabili.
+
+
+```{r}
+pairs.panels(Dati_numerici)
+```
+
+Il comando pairs.panels genera una matrice di visualizzazioni: nella **diagonale principale** sono rappresentate le distribuzioni univariate (istogrammi con curve di densità sovrapposte); nel **triangolo inferiore** sono riportati gli scatter plot bivariati con linea di tendenza lineare (retta di regressione lineare) sovrapposta in blu; nel **triangolo superiore** sono indicati i coeffici di correlazione di Pearson.
+\newpage
+
+
+## Analisi delle componenti principali (PCA)
+
+La PCA (Principal Component Analysis) è una tecnica di riduzione della dimensionalità che consente di sintetizzare un insieme ampio di variabili in un numero più ridotto di nuove variabili, preservando al contempo la maggior parte dell’informazione contenuta nei dati originali. Questo obiettivo viene raggiunto mediante una trasformazione delle variabili iniziali in un nuovo insieme di variabili, denominate componenti principali. Le componenti principali sono tra loro incorrelate e ordinate in modo tale che le prime spiegano la quota maggiore di variabilità totale del dataset, mentre le successive contribuiscono in misura via via decrescente.
+
+Poiché la matrice di correlazione mostrava valori generalmente bassi, ci aspettiamo che la PCA non produca una forte riduzione della dimensionalità. In particolare, è plausibile che nessuna singola componente principale riesca a spiegare una quota molto elevata della variabilità totale del dataset. Questo accade perché la PCA risulta più efficace quando le variabili originali sono fortemente correlate tra loro, in tal caso l’informazione ridondante può essere concentrata in poche componenti. Al contrario, in presenza di basse correlazioni, ciascuna variabile tende a contribuire in modo relativamente indipendente, distribuendo la varianza su più componenti principali.
+
+Selezioniamo solo le **variabili numeriche e standardizzaziamo** (media = 0, deviazione standard = 1) per rendere confrontabili variabili con scale diverse
+```{r}
+Dati_stand <- scale(Dati_numerici,center = TRUE, scale = TRUE)
+```
+Una volta standardizzate le nostre variabili numeriche eseguiamo la PCA:
+
+```{r, warning=FALSE}
+pc <- princomp(Dati_stand)
+fviz_eig(pc, addlabels = TRUE,
+barfill = "turquoise3",
+barcolor = "turquoise3",
+main = "Scree Plot - Varianza Spiegata",
+)
+```
+
+Lo Scree Plot ci mostra quanta informazione (varianza) è contenuta in ogni singola componente.
+
+Ora utilizziamo la funzione get_eigenvalue() per ottenere una tabella dettagliata dei valori propri (eigenvalues) associati a ciascuna componente principale. Questa tabella riporta in modo esplicito la quota di varianza spiegata da ogni componente, sia in termini di percentuale individuale sia di varianza cumulativa. Sebbene tali informazioni siano già rappresentate graficamente, la consultazione della tabella consente una lettura più precisa e analitica dei risultati.
+
+```{r}
+eig_val <-get_eigenvalue(pc)
+kable(eig_val, 
+      caption = "Autovalori e Percentuale di Varianza Spiegata",
+      col.names = c("Autovalore", "% Varianza", "% Cumulativa"),
+      digits = 2, 
+      align = "c")
+```
+
+Per determinare il numero ottimale di componenti da estrarre, è stata condotta una valutazione critica integrando i criteri statistici standard con le necessità cliniche dello studio:
+
+* **Soglia di Varianza**: Le prime 4 componenti spiegano cumulativamente il 66.37% della variabilità totale. Sebbene in ambiti ingegneristici si richiedano spesso soglie superiori (80%), in ambito biomedico — caratterizzato da un'elevata variabilità individuale e "rumore" fisiologico — una varianza spiegata prossima al 70% è considerata un risultato soddisfacente per descrivere la struttura latente dei dati.
+* **Scree Plot (Metodo del "Gomito")**: L'analisi grafica non evidenzia un "gomito" netto (o punto di flesso pronunciato), ma mostra un declino graduale e quasi lineare della varianza spiegata. Questa conformazione è tipica dei dataset in cui le variabili originali presentano basse correlazioni tra loro, suggerendo che l'informazione è distribuita su più dimensioni e non concentrata solo nelle primissime.
+* **Criterio di Kaiser**: Il criterio standard suggerirebbe di mantenere solo le componenti con autovalore >1 (quindi le prime 3). Tuttavia, la quarta componente presenta un autovalore di 0.96, un valore "borderline" vicinissimo alla soglia unitaria. Escluderla significherebbe scartare una componente che ha quasi la stessa forza informativa di una variabile originale.
+
+La decisione finale di includere la quarta componente è dettata soprattutto da una necessità interpretativa: come vedremo nei grafici successivi (Biplot), le variabili relative alle Piastrine e alla CPK sono rappresentate quasi esclusivamente nella terza e quarta dimensione. Fermarsi a 3 componenti significherebbe perdere informazioni cruciali sull'assetto ematologico ed enzimatico del paziente. Pertanto, la soluzione a 4 componenti (autovalore 0.96) rappresenta il miglior compromesso tra rigore statistico e completezza del quadro clinico
+
+```{r}
+componenti <- eig_val[eig_val$eigenvalue > 0.96, ]
+componenti
+```
+
+Procediamo adesso con la visualizzazione del Biplot, ovvero il grafico che proietta simultaneamente osservazioni (punti) e variabili (vettori) sul piano delle prime due componenti. Le regole di lettura sono le seguenti:
+
+* **Vettori**: La lunghezza indica quanto bene la variabile è rappresentata; l'angolo tra le frecce indica la correlazione (vettori vicini = correlazione positiva; opposti = inversa)
+* **Osservazioni**:I punti che si trovano nella direzione indicata da un vettore presentano valori elevati per quella specifica variabile.
+
+
+```{r}
+fviz_pca_biplot(pc, col.var = "#B22222")
+
+```
+Questo grafico sintetizza le relazioni cliniche più forti. Si evidenzia la netta correlazione inversa tra **serum_creatinine e time** (vettori lunghi e opposti), confermando il ruolo prognostico della funzionalità renale. Le variabili **ejection_fraction** e **serum_sodium** mostrano una correlazione positiva (vettori vicini), definendo un asse di funzionalità cardio-sodica.
+È importante notare che le variabili platelets e creatinine_phosphokinase presentano vettori molto corti vicino all'origine, indicando che questo piano non è sufficiente a spiegare la loro variabilità
+
+Poiché le prime due componenti spiegano circa il 38% della varianza totale, è stato necessario ispezionare anche il secondo piano fattoriale (Dim.3 e Dim.4) per visualizzare le relazioni tra le variabili rimanenti.
+
+```{r}
+fviz_pca_biplot(pc,
+                axes = c(3, 4),
+                col.var = "#B22222")
+
+```
+
+In questo piano, i vettori di platelets (piastrine) e creatinine_phosphokinase (CPK) appaiono lunghi e ben definiti, specialmente lungo la terza dimensione. Questo conferma che l'informazione relativa a questi parametri ematologici ed enzimatici costituisce una struttura latente indipendente rispetto a quella renale/prognostica del primo piano. L'ispezione del piano secondario (Dim 3-4) ha permesso di individuare specifici outlier che non emergevano nel primo piano fattoriale. In particolare, i pazienti **#2** e **#61** si posizionano alle estremità del vettore relativo alla Creatinina Fosfocinasi (CPK).
+
+```{r}
+summary(Dati$creatinine_phosphokinase) 
+Dati[c("2", "61"), "creatinine_phosphokinase"]
+```
+
+Questi valori estremi, compatibili con eventi clinici severi, sono stati mantenuti nell'analisi in quanto rappresentano condizioni patologiche reali e non errori di misurazione.
+
+L'analisi ha mostrato che le variabili cliniche si muovono in modo indipendente: per avere un quadro completo del paziente non basta guardare la funzionalità renale (Dim 1-2), ma serve includere anche i parametri ematologici come le piastrine (Dim 3-4).
+Questo ci permette di raggruppare i pazienti basandoci sulle quattro dimensioni latenti più informative (66% della varianza totale). Sebbene questo approccio comporti una perdita del 34% di informazione, esso rappresenta il miglior compromesso tra riduzione dimensionale e preservazione della struttura clinica multifattoriale del dataset. La robustezza dei cluster risultanti dovrà essere validata per verificare che tale scelta non comprometta la qualità della segmentazione.
+\newpage
+
+## CLUSTER ANALYSIS
+
+L’analisi dei cluster è un gruppo di tecniche multivariate il cui principale scopo è raggruppare oggetti in base alle caratteristiche che possiedono, al fine di scoprire pattern nascosti e segmentare i dati in sottogruppi omogeneibasati esclusivamente sulle loro somiglianze cliniche, senza conoscere a priori la diagnosi.
+Esistono due principali approcci:
+
+* **Analisi gerarchica**: costruisce una gerarchia di cluster (es. dendrogramma), utile per esplorare relazioni tra gruppi quando il campione non è troppo grande
+* **Analisi non gerarchica**: tra questi troviamo il metodo k-means; questo approccio richiede di specificare preventivamente il numero di cluster desiderato e assegna gli oggetti di conseguenza.
+
+Gli algoritmi di clustering si basano sul calcolo delle distanze matematiche tra i punti. Poiché le nostre variabili hanno unità di misura molto diverse usiamo la variabile standardizzata creata in precedenza **"Dati_stand"**.
+
+```{r}
+describe(Dati_stand)
+```
+
+Andando a **normalizzare** le variabili notiamo che adesso ognuna di esse ha media 0 e deviazione standard 1 (e quindi varianza unitaria) rendendole confrontabili.
+
+Per determinare in modo oggettivo il numero ottimale di cluster utilizziamo il **clustering gerarchico** è la scelta metodologica migliore. Il K-means (quello non gerarchico) si usa solitamente quando si hanno migliaia di dati e il gerarchico diventa troppo lento da calcolare. Con il nostro numero di osservazioni il gerarchico è molto più ricco perché ci permette di vedere il **Dendrogramma** (l'albero) e decidere "a occhio" dove tagliare.
+
+Calcoliamo ora la matrice delle distanze, come metodo per calcolare le distanze andiamo a selezionare quello **euclideo** perchè particolarmente appropriata per variabili standardizzate.
+
+```{r}
+dist_raw <- dist(Dati_stand, method = "euclidean")
+```
+
+Utilizziamo ora la funzione hclust, che consente di eseguire una cluster analysis gerarchica in ambiente R. Questo approccio permette di raggruppare progressivamente le osservazioni in cluster, senza la necessità di specificare a priori il numero di gruppi. Come metodo di aggregazione viene adottato **Ward.D2**, in quanto minimizza a ogni passo dell’algoritmo l’incremento della somma dei quadrati intra-cluster, favorendo la formazione di gruppi compatti e caratterizzati da una bassa variabilità interna.
+
+```{r}
+hc_raw <- hclust(dist_raw, method = "ward.D2")
+```
+
+Andiamo ora a visualizzare il **Dendogramma**
+
+```{r}
+plot(hc_raw,
+main = "Dendrogramma- Metodo WardD2",
+xlab = "Osservazioni",
+ylab = "Distanza",
+labels= FALSE,
+hang =-1,
+col = "black")
+
+```
+Il risultato dell'analisi è visualizzato tramite un dendrogramma. Sull'asse delle ascisse (x) troviamo le **'foglie'** ovvero i singoli pazienti, che inizialmente sono considerati entità separate. Sull'asse delle ordinate (y) è rappresentata la distanza (o **dissimilarità**): più in alto avviene la fusione tra due rami, più i gruppi uniti sono diversi tra loro. La lunghezza dei rami verticali rappresenta la 'resistenza' di un gruppo prima di fondersi con un altro. Di conseguenza, un ramo verticale molto lungo indica un cluster particolarmente solido e ben definito. Per determinare il numero ottimale di cluster (k), si applica il criterio visivo del 'salto', cercando il punto in cui la distanza verticale tra le fusioni è maggiore. L'ispezione del dendrogramma suggerisce una soluzione a 2 o 3 cluster. 
+
+Per confermare matematicamente questa scelta, è stata calcolata la **WSS** (Within-Cluster Sum of Squares), analizzando come varia la compattezza dei gruppi al variare del numero di cluster.
+
+```{r}
+grf_wss<-fviz_nbclust(Dati_stand,FUN=hcut,method="wss")
+grf_wss +
+  labs(title = "Metodo del Gomito (WSS) - Dati Grezzi",
+       subtitle = "Osserva dove la curva inizia ad appiattirsi")
+```
+
+Nel grafico non emerge un gomito netto. La curva scende in modo molto graduale ("smooth"), questo indica che i gruppi sui dati grezzi c'è molta sovrapposizione. Usiamo il metodo della **Silhouette** è la soluzione perfetta per eliminare ogni dubbio.
+
+```{r}
+fviz_nbclust(Dati_stand, FUN = hcut, method = "silhouette") +
+  labs(title = "Metodo della Silhouette - Dati Grezzi",
+       subtitle = "Il numero ottimale corrisponde alla barra più alta")
+```
+Guardando il grafico della Silhouette, la punta più alta è proprio sul 3 (supera lo 0.20), battendo di poco anche il 2. Questo risultato fornisce una prima giustificazione matematica per dividere i pazienti in tre gruppi.
+
+Il dendogramma divsio in 3 cluster si mostrerà in questo modo
+```{r, warning=FALSE}
+fviz_dend(hc_raw, 
+          show_labels = FALSE,      
+          rect = TRUE,              
+          k = 3,                    
+          palette = "jco",
+          main = "Dendrogramma: Variabili Originali (Standardizzate)"
+          )
+```
+
+Andiamo a mettere in tabella i cluster
+
+```{r}
+cluster <- cutree(hc_raw,k=3)
+table(cluster)
+```
+Tuttavia, analizzando la numerosità dei gruppi generati tramite il taglio del dendrogramma a k=3, è emersa la presenza di un cluster contenente solamente 6 osservazioni (pari a circa il 2% del campione). Questo indica che l'algoritmo ha isolato un piccolo nucleo di outliers piuttosto che identificare una reale sottopopolazione clinica. Per garantire la solidità dell'analisi e l'interpretabilità clinica dei profili, si è deciso di scartare la soluzione a 3 cluster in favore della soluzione a 2 cluster (k=2). Questa suddivisione, pur avendo un indice di Silhouette leggermente inferiore, offre una ripartizione molto più bilanciata e coerente.
+
+```{r, warning=FALSE}
+fviz_dend(hc_raw, 
+          show_labels = FALSE,      
+          rect = TRUE,              
+          k = 2,                    
+          palette = "jco",
+          main = "Dendrogramma: Variabili Originali (Standardizzate)"
+          )
+```
+```{r}
+cluster <- cutree(hc_raw,k=2)
+table(cluster)
+```
+
+Possiamo andare adesso a visualizzare i cluster in 2 dimensioni per vedere la distribuzione dei gruppi
+
+```{r}
+fviz_cluster(list(data = Dati_stand, cluster = cluster),
+             geom = "point",             
+             ellipse.type = "convex",    
+             palette = "jco",            
+             ggtheme = theme_minimal(),
+             main = "Cluster Analysis sui Dati Grezzi (Standardizzati)",
+             subtitle = "Si nota una significativa sovrapposizione tra i gruppi"
+             )
+```
+
+Visualizzando i cluster sul piano cartesiano delle variabili originali, si nota una marcata sovrapposizione tra i gruppi. I poligoni si intersecano, indicando che lavorare sulle variabili originali non permette una distinzione netta dei profili clinici a causa del "rumore" statistico e della ridondanza tra le variabili. Per ovviare a questo problema e ottenere una segmentazione più robusta, procediamo applicando il clustering sulle **Componenti Principali (PCA)** viste in precedenza.
+
+Per ottenere una segmentazione più robusta e pulita dal rumore, si adotta l'approccio HCPC (Hierarchical Clustering on Principal Components). L'analisi viene condotta sulle prime 4 Componenti Principali (identificate nella PCA precedente come le dimensioni portanti dell'informazione), escludendo le componenti successive che contengono prevalentemente varianza residua e rumore. L'algoritmo esegue un clustering gerarchico sulle componenti e successivamente consolida la partizione tramite K-means per ottimizzare l'allocazione dei pazienti "di confine".
+```{r}
+pc<- PCA(Dati_stand, scale.unit = TRUE, ncp = 4, graph = FALSE)
+res.hcpc <- HCPC(pc,nb.clust = 2, graph = FALSE)
+
+
+fviz_cluster(res.hcpc,
+             geom = "point",
+             ellipse.type = "convex",
+             palette = "jco",
+             ggtheme = theme_minimal(),
+             main = "Clustering su PCA (Dati Puliti)",
+             subtitle = "Notare la separazione netta tra i gruppi"
+             )
+```
+
+Visualizzando i cluster sul piano delle prime due componenti principali, si nota come la struttura a due gruppi (k=2) risulti ora nettamente definita infatti i due poligoni occupano regioni distinte dello spazio cartesiano con una sovrapposizione minima
+
+```{r}
+colors <- c("#00AFBB", "#E7B800")
+colors <- colors[as.numeric(res.hcpc$data.clust$clust)]
+
+s3d <- scatterplot3d(pc$ind$coord[,1:3], pch = 16, color=colors,
+              main="Cluster Analysis 3D",
+              xlab = "Dim 1",
+              ylab = "Dim 2",
+              zlab = "Dim 3",
+              angle = 120,       
+              scale.y = 1.2,) 
+
+legend("topright", legend = levels(res.hcpc$data.clust$clust),
+      col =  c("#00AFBB", "#E7B800"), pch = 16)
+```
+```{r}
+res.hcpc$desc.var$quanti
+```
+
+Questa tabella mostra i risultati della nostra analisi clustering. 
+Per quanto riguarda la struttura della tabella, il **v.test** è una statistica che misura quanto la media di una variabile nel cluster si discosta dalla media generale, dove valori assoluti elevati indicano che quella variabile è particolarmente importante per caratterizzare il cluster. La colonna **"Mean in category"** mostra la media della variabile nel cluster specifico, mentre **"Overall mean"** rappresenta la media complessiva che è vicina a zero perché le variabili sono state standardizzate. Tutti i **p-value** risultano altamente significativi, essendo inferiori a 0.001.
+Il **primo cluster** sembra caratterizzare pazienti a rischio elevato. Questi pazienti sono significativamente più anziani rispetto alla media generale, con un v.test di +10.6. Presentano inoltre valori più alti di creatinina sierica (+5.9), il che indica una peggiore funzione renale. Paradossalmente, mostrano una frazione di eiezione più alta (+4.8), che evidenzia una migliore funzione cardiaca. Questo suggerisce che la mortalità nel primo gruppo non sia guidata primariamente dal fallimento della pompa cardiaca (possibile quadro di scompenso a frazione preservata), ma sia determinata dalla sinergia tra età avanzata e insufficienza renale (Creatinina elevata). Inoltre questi pazienti ma sono caratterizzati da un tempo più breve (-8.9), che probabilmente indica una minore sopravvivenza o un periodo di follow-up più breve.
+Il **secondo cluster**, al contrario, identifica pazienti più giovani con un v.test di -10.6. Questi pazienti hanno valori di creatinina più bassi (-5.9), indicando una migliore funzione renale, ma presentano una frazione di eiezione più bassa (-4.8), suggerendo una peggiore funzione cardiaca. Tuttavia, sono caratterizzati da un tempo più lungo (+8.9), che indica una maggiore sopravvivenza o un periodo di osservazione più esteso.
+\newpage
+
+
+## Modello di Regressione Lineare
+
+La fase conclusiva del presente report statistico consiste nella costruzione di un modello di regressione lineare, finalizzato a esplorare e quantificare le relazioni tra le variabili analizzate. La regressione lineare rappresenta uno degli strumenti fondamentali dell’analisi statistica, in quanto consente di descrivere come una variabile di risposta varia al variare di una o più variabili esplicative.
+
+Il modello di regressione lineare **semplice** coinvolge una sola variabile indipendente e cerca di descrivere la relazione con una retta. 
+
+Per scegliere le variabili da inserire nel modello andiamo a vedere quelle più correlate, nel nostro caso le variabili numeriche non sono molto correlate visto l'ambito trattato quindi gia possiamo aspettare un **coefficiente di determinazione (R^2)** basso, nel nostro caso possiamo quindi scegliere di predire la variabile "time" tempo di osservazione in relazione all'età del paziente.
+```{r}
+modello <- lm(time ~ age, data = Dati)
+summary(modello)
+```
+
+I risultati della regressione lineare semplice evidenziano una relazione statisticamente significativa (p < 0.001) e inversa tra l'età e il tempo di follow-up.
+Il coefficiente angolare (Estimate) pari a -1.462 indica che, mediamente, per ogni anno di età in più, il tempo di osservazione si riduce di circa 1.5 giorni.
+Tuttavia, come ipotizzato dall'analisi delle correlazioni, il coefficiente di determinazione (R^2) è molto basso (0.05), suggerendo che l'età da sola spiega solo il 5% della variabilità del tempo. Risulta necessario passare a un modello di regressione lineare multipla.
+ 
+Nel modello di regressione abbiamo quindi incluso, oltre le variabili numeriche, le **variabili cliniche categoriali** (come Anemia, Diabete, Ipertensione) perché rappresentano le condizioni di salute del paziente all'inizio dello studio. Abbiamo invece escluso la variabile DEATH_EVENT (Morte) perché essa rappresenta il risultato finale dello studio, proprio come la variabile temporale (time) che stiamo cercando di prevedere. Inserirla avrebbe falsato l'analisi, confondendo la causa con l'effetto.
+
+```{r}
+modello_full <- lm(time ~ age + creatinine_phosphokinase + ejection_fraction + 
+                   platelets + serum_creatinine + serum_sodium + sex + 
+                   smoking + diabetes + high_blood_pressure + anaemia, 
+                   data = Dati)
+summary(modello_full)
+```
+
+Dall’analisi dei coefficienti osserviamo che l'età resta una variabile significativa e in aggiunta troviamo la variabile categoriale sulla presenza di pressione alta, inoltre risulta significativa la variabile categoriale che conferma la presenza di anemia e borderline la creatinina sierica, molte variabili non sono significative poiché presentano un p-value superiore a 0.1, Queste variabili non offrono un contributo statisticamente significativo. Per questo motivo, dato che  mostrano p > 0.05, costruiremo un modello escludendole, così da ottenere una soluzione più semplice e più efficace.
+
+Utilizziamo la funzione step() per escludere le variabili non significative.
+
+```{r}
+modello_finale <- step(modello_full, direction = "backward", trace = 0)
+
+summary(modello_finale)
+```
+
+L'adozione della procedura di selezione Stepwise Backward ha permesso di semplificare il modello, portando a un lieve incremento del coefficiente di determinazione corretto (Adjusted R²) da 0.087 a 0.096. Tale miglioramento suggerisce che le variabili escluse non apportavano un contributo sostanziale al potere esplicativo del modello.
+Il modello finale spiega pertanto circa il 10% della variabilità temporale del follow-up. Sebbene tale capacità predittiva possa apparire contenuta in termini assoluti, In ambito biomedico e clinico, secondo le linee guida classiche stabilite da **Jacob Cohen** (1988) per le scienze comportamentali e biologiche, valori di R² compresi tra il 10% e il 30% sono considerati accettabili per fenomeni complessi come la prognosi di patologie croniche. Il risultato è quindi coerente con la natura multifattoriale dell'insufficienza cardiaca, la cui prognosi dipende da numerose variabili non incluse nel dataset (es. terapie farmacologiche specifiche, genetica, alimentazione, stress, ecc...). Nonostante questa limitazione il modello raggiunge pienamente il suo obiettivo primario: **identificare con significatività statistica i fattori di rischio clinici**.
+Un risultato di particolare rilievo emerso riguarda la Creatinina Sierica (serum_creatinine). Nel modello multivariato iniziale, la creatinina sierica mostrava un'associazione borderline (p=0.07). La procedura di selezione stepwise, rimuovendo variabili con scarso contributo informativo, ha ridotto la varianza degli stimatori, portando il p-value a **0.039** e confermando la rilevanza statistica della funzionalità renale come fattore prognostico. Il coefficiente negativo associato conferma il dato clinico atteso: un incremento dei valori di creatinina (peggioramento della funzionalità renale) è associato a una riduzione significativa del tempo di osservazione del paziente.
+
+Inoltre per confrontare il modello completo con quello ridotto (in cui abbiamo tolto la variabile non significativa), possiamo usare due criteri molto diffusi: **AIC (Akaike Information Criterion)** e **BIC (Bayesian Information Criterion)**. Questi indicatori permettono di valutare modelli alternativi considerando sia quanto bene il modello si adatta ai dati, sia quanto è complesso. La regola ci dice che valori più bassi di AIC o BIC indicano un modello migliore.
+
+```{r}
+AIC(modello_full, modello_finale)
+BIC(modello_full, modello_finale)
+```
+
+Il confronto tra i due modelli evidenzia una chiara superiorità del modello ridotto. Il criterio AIC passa da **3437.2 a 3427.7**, indicando una migliore capacità predittiva relativa. Ancora più marcato è il miglioramento del BIC, che scende da **3485.3 a 3449.9**. Poiché il BIC penalizza fortemente l'inclusione di parametri superflui, questa riduzione di oltre 35 punti fornisce una prova statistica molto forte che il modello semplificato è preferibile. 
+\newpage
+Intervalli di confidenza del modello
+```{r}
+confint(modello_finale)
+```
+
+L’analisi degli intervalli di confidenza al 95% conferma la robustezza e la significatività statistica delle associazioni identificate dal modello. Un risultato fondamentale è che **nessuno degli intervalli calcolati include il valore zero**: ciò permette di affermare con il 95% di probabilità che tutte le variabili selezionate hanno un effetto reale e non casuale sulla variabile dipendente. L'avanzare dell'età mostra un effetto costantemente negativo sul tempo di follow-up (IC 95%: da -1.89 a -0.45), confermando il trend di rischio intrinseco legato all'invecchiamento. Analogamente, per la creatinina sierica, sebbene l'ampiezza dell'intervallo (da -16.93 a -0.44) suggerisca una certa variabilità nella stima, i valori si mantengono interamente in ambito negativo, ribadendo che livelli ematici più elevati sono predittivi di una prognosi peggiore.
+Tra le variabili categoriche, la pressione alta evidenzia l'impatto clinico più marcato, con una riduzione stimata del tempo di follow-up compresa tra circa 11 e 46 giorni (IC 95%: -46.25, -10.88). Infine, anche la presenza di anemia risulta associata a una diminuzione del tempo (IC 95%: da -34.70 a -0.61).
+ 
+Per valutare l'affidabilità delle stime prodotte, è fondamentale analizzare la distribuzione degli errori (residui) del modello. Il primo strumento diagnostico utilizzato è il grafico Residuals vs Fitted (Residui rispetto ai Valori Previsti)
+
+```{r}
+plot(modello_finale, 1)
+```
+Il grafico **Residuals vs Fitted** mette in relazione i valori previsti dal modello (asse orizzontale), ovvero il tempo di follow-up stimato in base alle variabili cliniche, con i residui (asse verticale), che rappresentano l'errore di previsione rispetto al dato reale. La linea orizzontale sullo zero costituisce il riferimento ideale di previsione perfetta.
+
+Dall'analisi visiva, si osserva una dispersione dei punti abbastanza omogenea, pur con lievi variazioni che approfondiremo nel grafico Scale-Location. Tale uniformità suggerisce un ragionevole rispetto dell'assunzione di **omoschedasticità** (varianza costante degli errori), non evidenziando gravi forme "a imbuto" che indicherebbero instabilità nella varianza. Anche l'ipotesi di linearità appare confermata: sebbene la **linea di tendenza** (rossa) mostri lievi oscillazioni locali, il suo andamento generale rimane prossimo allo zero, senza evidenziare curvature sistematiche che richiederebbero modelli non lineari.
+
+La distribuzione dei residui appare **equilibrata** sia al di sopra che al di sotto della linea dello zero lungo tutto l'arco delle previsioni. Ciò indica che il modello opera in modo neutrale, senza commettere errori sistematici di sovrastima o sottostima della sopravvivenza. Il fatto che i punti non giacciano esattamente sulla linea dello zero è del tutto atteso e riflette la naturale variabilità clinica della malattia: ogni paziente è unico e il modello ne cattura correttamente l'andamento generale, pur con un fisiologico margine di oscillazione.
+
+Si nota inoltre l'assenza di punti nella parte sinistra del grafico, il che indica semplicemente che il modello stima per la quasi totalità dei pazienti un tempo di follow-up superiore ai 50 giorni, coerentemente con i dati clinici osservati. Infine, sono presenti alcune isolate osservazioni etichettate (es. pazienti 218, 290, 18) che si discostano maggiormente dalla media (outlier).
+
+Per controllare l’ipotesi di normalità dei residui, utilizziamo il **Normal Q-Q plot** (Quantile-Quantile), utile per verificare se i residui seguono una distribuzione normale.
+```{r}
+plot(modello_finale, 2)
+```
+
+Il secondo grafico diagnostico, il **Normal Q-Q Plot**, permette di verificare se gli errori del modello seguono una distribuzione normale (Gaussiana), condizione necessaria per l'affidabilità degli intervalli di confidenza e dei test di significatività (p-value). Nel grafico, i residui standardizzati vengono confrontati con i quantili teorici di una normale: **se la distribuzione è normale, i punti devono disporsi lungo la linea diagonale tratteggiata**.
+
+Osservando il grafico, si nota che la maggior parte dei punti, in particolare nella sezione centrale (tra i quantili -1 e +1), segue fedelmente la linea di riferimento. Questo indica che, per la grande maggioranza dei pazienti, gli errori del modello si distribuiscono normalmente. Tuttavia alle estremità della distribuzione (le "code"), si osserva una deviazione dalla linea teorica. In particolare, nella parte superiore destra, i punti tendono a curvare verso l'alto, evidenziando nuovamente la presenza di quei casi "estremi" già identificati come outlier (es. pazienti 218, 290). Nonostante questa lieve deviazione agli estremi e considerata la numerosità delle osservazioni, il buon allineamento del corpo centrale dei dati permette di considerare sufficientemente rispettata l'assunzione di normalità.
+
+Passiamo ora al grafico **Scale-Location**.
+
+```{r}
+plot(modello_finale, 3)
+```
+
+Il grafico Scale-Location è stato esaminato per verificare l'ipotesi di **omoschedasticità**, ovvero che la varianza degli errori (la "certezza" del modello) rimanga costante indipendentemente dal valore predetto. Sull'asse verticale è riportata la radice quadrata dei residui standardizzati: in uno scenario ideale, la linea rossa di tendenza dovrebbe apparire orizzontale.
+
+Dall'analisi del grafico si nota invece una **pendenza positiva** della linea di lisciamento rossa, che tende a salire procedendo da sinistra verso destra. sservando la distribuzione dei punti, notiamo che i dati sono **scarsi e dispersi nella parte iniziale** (valori predetti bassi), mentre diventano molto più **densi e numerosi nella parte finale** (valori predetti alti, tra 100 e 150). Questo andamento configura una **lieve eteroschedasticità**: suggerisce cioè che la dispersione degli errori non è uniforme, ma tende ad aumentare in proporzione alla durata del follow-up stimato. In termini clinici, ciò indica che il modello mantiene una precisione elevata nel predire eventi a breve termine, mentre il margine di incertezza si amplia leggermente quando si stimano tempi di sopravvivenza più lunghi.
+
+passiamo all'ultimo grafico **Residuals vs Leverage**.
+```{r}
+plot(modello_finale, 5)
+```
+
+Il grafico Residuals vs Leverage è stato analizzato per monitorare la stabilità del modello, incrociando due metriche fondamentali: i **residui** (ovvero l'errore di previsione, la differenza tra la sopravvivenza reale osservata e quella stimata dal modello) e la **leverage** (leva). Quest'ultima indica quanto il profilo delle variabili indipendenti di un singolo paziente si discosti dalla media del campione; in altre parole, un'alta leverage segnala un paziente con una combinazione di caratteristiche cliniche (es. età e valori ematici) particolarmente "estrema" o inusuale rispetto agli altri.
+
+Dal grafico emerge chiaramente il caso del paziente identificato con l'indice 218, che presenta un valore di leverage notevolmente superiore al resto del campione (situato all'estrema destra del grafico), suggerendo un quadro clinico atipico rispetto alla media della popolazione studiata, e un residuo positivo elevato, indicando che il modello ha sottostimato significativamente il suo tempo di follow-up (il paziente è sopravvissuto o rimasto nello studio molto più a lungo di quanto previsto). La sua presenza influenza la linea di tendenza rossa, che flette verso l'alto nella parte terminale. Tuttavia, valutando la **Distanza di Cook** (la metrica standard per misurare l'influenza globale di un'osservazione), il punto non supera le soglie critiche (solitamente D > 1) che indicherebbero una compromissione della stabilità del modello.
+
+**Conclusioni finali**
+
+L’analisi statistica condotta sui pazienti con insufficienza cardiaca ha permesso di individuare i fattori clinici che influenzano significativamente il tempo di follow-up (ovvero il periodo di osservazione del paziente). Il modello finale, basato su età, creatinina, pressione alta e anemia, si è dimostrato uno strumento valido per interpretare le dinamiche cliniche.
+
+Nonostante la variabilità intrinseca dei dati, la validità del modello è supportata dalla numerosità campionaria e dai test diagnostici. L'analisi degli intervalli di confidenza (tutti negativi) conferma che l'aumento di questi quattro parametri è associato a una riduzione del tempo di follow-up. Nello specifico, l'ipertensione e livelli elevati di creatinina si sono rivelati i fattori più impattanti, riducendo drasticamente il periodo medio di osservazione.
+
+In sintesi, lo studio evidenzia come il quadro clinico non dipenda da una sola causa, ma dal combinarsi dell'invecchiamento e del deterioramento delle funzionalità renale e cardiovascolare.I risultati suggeriscono l'importanza di un monitoraggio integrato di età, funzionalità renale, pressione arteriosa e anemia. In particolare, il controllo della pressione arteriosa e della funzione renale potrebbero contribuire al miglioramento della prognosi, specialmente nei soggetti anziani o anemici, coerentemente con quanto riportato in letteratura clinica.
